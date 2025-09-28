@@ -9,7 +9,12 @@ const RATE_LIMIT = 10;
 const TIME_WINDOW = 60; 
 
 
-const REDIS_URL = 'redis://default:m36B2djE8O6uTnSPoUgDniLBv7hefVFp@redis-14698.c245.us-east-1-3.ec2.redns.redis-cloud.com:14698'; 
+const REDIS_URL = process.env.REDIS_URL; 
+
+if (!REDIS_URL) {
+  console.error("FATAL ERROR: REDIS_URL is not defined in the environment.");
+  process.exit(1); // Exit the application if the secret is missing.
+}
 
 
 const app = express();
