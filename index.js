@@ -74,10 +74,7 @@ const startServer = async () => {
 
     // --- 7a. API Routes ---
     // Pass the connected client to our middleware
-    app.get('/', (req, res) => {
-      res.status(200).send('Hello World! The server is running.');
-    });
-    
+
     app.get('/api/resource', rateLimiter(redisClient), (req, res) => {
       res.status(200).json({
         message: 'Success! You have accessed the protected resource.',
