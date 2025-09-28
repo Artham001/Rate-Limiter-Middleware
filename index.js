@@ -1,87 +1,97 @@
-// --- 1. Import our building blocks ---
+
+// --- 1. Import and configure dotenv ---
+require('dotenv').config();
+
+// --- 2. Import our other building blocks ---
 const express = require('express');
 const cors = require('cors');
 const redis = require('redis');
 
-
+// --- 3. Configuration ---
 const PORT = 3001;
-const RATE_LIMIT = 10; 
-const TIME_WINDOW = 60; 
+const RATE_LIMIT = 10;
+const TIME_WINDOW = 60; // Time window in seconds
 
-
-const REDIS_URL = process.env.REDIS_URL; 
+// --- 4. Redis Connection ---
+const REDIS_URL = process.env.REDIS_URL;
 
 if (!REDIS_URL) {
   console.error("FATAL ERROR: REDIS_URL is not defined in the environment.");
-  process.exit(1); // Exit the application if the secret is missing.
+  process.exit(1);
 }
 
-
+// --- 5. Express App Setup ---
 const app = express();
-let redisClient;
+app.use(cors());
 
-(async () => {
-  try {
-    redisClient = redis.createClient({ url: REDIS_URL });
-    redisClient.on('error', (err) => console.log('Redis Client Error', err));
-    await redisClient.connect();
-    console.log('✅ Successfully connected to Cloud Redis.');
-  } catch (err) {
-    console.error('Could not connect to Cloud Redis:', err);
-  }
-})();
-
-
-const rateLimiter = async (req, res, next) => {
-  
-  console.log('Detected IP:', req.ip); 
-
-  
-  const ip = req.ip;
-
+// --- 6. The Rate Limiter Middleware ---
+// We will pass the redisClient to the middleware
+const rateLimiter = (redisClient) => async (req, res, next) => {
+  // Safeguard: If redis is not ready, skip the limiter
   if (!redisClient || !redisClient.isReady) {
-    console.log('Redis client not ready, skipping rate limiter.');
+    console.warn('Redis client not ready, skipping rate limiter.');
     return next();
   }
+
+  const ip = req.ip || req.connection.remoteAddress;
 
   try {
     const [requestCount] = await redisClient
       .multi()
       .incr(ip)
-      .expire(ip, TIME_WINDOW, 'NX') 
+      .expire(ip, TIME_WINDOW, 'NX')
       .exec();
 
- 
+    console.log(`Request #${requestCount} from IP: ${ip}`);
+
     if (requestCount > RATE_LIMIT) {
       console.log(`🔴 RATE LIMIT EXCEEDED for IP: ${ip}`);
-      // Send a "Too Many Requests" response
-      return res.status(429).json({ 
-        message: 'Too Many Requests. Please try again in a minute.' 
+      return res.status(429).json({
+        message: 'Too Many Requests',
+        limit: RATE_LIMIT,
+        window: `${TIME_WINDOW}s`,
       });
     }
 
-    console.log(`Request #${requestCount} from IP: ${ip}`);
-    next(); 
+    next();
   } catch (err) {
     console.error('Error in rate limiter middleware:', err);
-    
-    next(); 
+    next();
   }
 };
 
-app.use(cors());
+// --- 7. Main Application Logic ---
+const startServer = async () => {
+  const redisClient = redis.createClient({ url: REDIS_URL });
 
-app.use('/api', rateLimiter); 
+  redisClient.on('error', (err) =>
+    console.error('❌ Redis Client Error:', err)
+  );
 
+  try {
+    await redisClient.connect();
+    console.log('✅ Successfully connected to Cloud Redis.');
 
-app.get('/api/resource', (req, res) => {
-  res.status(200).json({ message: 'Success! You have accessed the resource.' });
-});
+    // --- 7a. API Routes ---
+    // Pass the connected client to our middleware
+    app.get('/api/resource', rateLimiter(redisClient), (req, res) => {
+      res.status(200).json({
+        message: 'Success! You have accessed the protected resource.',
+      });
+    });
 
+    // --- 7b. Start the Server ---
+    // Only start the server AFTER the Redis connection is successful
+    app.listen(PORT, () => {
+      console.log(`Server is running on port ${PORT}`);
+    });
 
-app.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
-});
+  } catch (err) {
+    console.error('❌ Failed to connect to Redis. Server will not start.', err);
+    process.exit(1); // Exit if we can't connect to the database
+  }
+};
 
-
+// --- 8. Run the application ---
+startServer();
 
