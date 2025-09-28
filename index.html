@@ -1,0 +1,124 @@
+
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rate Limiter Test</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #f0f2f5;
+            color: #333;
+        }
+        .container {
+            text-align: center;
+            background-color: white;
+            padding: 40px;
+            border-radius: 12px;
+            box-shadow: 0 8px 30px rgba(0,0,0,0.12);
+            width: 90%;
+            max-width: 400px;
+        }
+        h1 {
+            margin-top: 0;
+            font-size: 1.8rem;
+            color: #1c1e21;
+        }
+        p {
+            color: #606770;
+            margin-bottom: 25px;
+        }
+        button {
+            background-color: #0866ff;
+            color: white;
+            border: none;
+            padding: 12px 25px;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background-color 0.2s ease, transform 0.1s ease;
+        }
+        button:active {
+            transform: scale(0.98);
+        }
+        button:hover {
+            background-color: #0655d4;
+        }
+        .status {
+            margin-top: 25px;
+            padding: 15px;
+            border-radius: 8px;
+            font-weight: 500;
+            min-height: 25px;
+            transition: background-color 0.3s ease, color 0.3s ease;
+        }
+        .status.success {
+            background-color: #e7f3ff;
+            color: #0866ff;
+        }
+        .status.error {
+            background-color: #ffebe8;
+            color: #d93025;
+        }
+        .status.limit {
+            background-color: #fffbe2;
+            color: #f7b928;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>API Rate Limiter Test</h1>
+    <p>Click the button repeatedly to test the rate limit (10 requests per minute).</p>
+    <button id="callApiButton">Call API</button>
+    <div id="statusBox" class="status">Server response will appear here.</div>
+</div>
+
+<script>
+    const callApiButton = document.getElementById('callApiButton');
+    const statusBox = document.getElementById('statusBox');
+    
+    // The address of our backend server
+    const API_URL = 'http://localhost:3001/api/resource';
+
+    callApiButton.addEventListener('click', async () => {
+        statusBox.textContent = 'Calling API...';
+        statusBox.className = 'status'; // Reset styling
+
+        try {
+            const response = await fetch(API_URL);
+            const data = await response.json();
+
+            // Check if the server response was successful (HTTP status 200-299)
+            if (response.ok) {
+                statusBox.textContent = `✅ Success: ${data.message}`;
+                statusBox.classList.add('success');
+            } else {
+                // If the status is 429, we've been rate limited
+                if (response.status === 429) {
+                    statusBox.textContent = `🔴 Rate Limited: ${data.message}`;
+                    statusBox.classList.add('limit');
+                } else {
+                    statusBox.textContent = `Error: ${data.message}`;
+                    statusBox.classList.add('error');
+                }
+            }
+        } catch (error) {
+            // This catches network errors, like if the server isn't running
+            console.error('Fetch error:', error);
+            statusBox.textContent = 'Connection Error. Is the backend server running?';
+            statusBox.classList.add('error');
+        }
+    });
+</script>
+
+</body>
+</html>
